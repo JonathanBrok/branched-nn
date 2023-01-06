@@ -3,7 +3,7 @@ from models.branched_models import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 
-from moore_penrose_functions import *
+from core.moore_penrose_functions import *
 
 
 def toy_random_gradients(m, k, l, distribution_mode='mult'):

@@ -2,7 +2,6 @@ import json
 import argparse
 import torch
 import matplotlib.pyplot as plt
-import numpy as np
 
 # from train_resnet_on_cifar10 import test as test_cifar10
 # from train_resnet_on_cifar10 import get_data_loaders as get_cifar10_loaders
@@ -11,11 +10,7 @@ from train_branched_models_on_mnist import test as test_mnist
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 from train_branched_models_on_mnist import get_net_criterion as get_net_criterion_mnist
 
-from models.linearized_model import BranchedLinearizedModel
-
-from models.branched_models import NetBranched
-
-from moore_penrose_functions import moore_penrose_analysis_for_branched_net
+from core.moore_penrose_functions import moore_penrose_analysis_for_branched_net
 
 from utils.other_utils import MyMSELOSS
 

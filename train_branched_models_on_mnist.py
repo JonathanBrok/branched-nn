@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from models.linearized_model import BranchedLinearizedModel
 from models.models import *
 from models.branched_models import *
-from moore_penrose_functions import specialization
+from core.moore_penrose_functions import specialization
 
 
 def get_net(args, num_classes, device):
