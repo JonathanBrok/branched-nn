@@ -101,6 +101,13 @@ def compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None
         acts_normal.append(act_normal_cur)
         acts_mult.append(act_mult_cur)
 
+    specs_grad = np.asarray(specs_grad)
+    specs_normal = np.asarray(specs_normal)
+    specs_mult = np.asarray(specs_mult)
+    acts_grad = np.asarray(acts_grad)
+    acts_normal = np.asarray(acts_normal)
+    acts_mult = np.asarray(acts_mult)
+
     if show_along is not None:
         if show_along == 'm':
             xticks = np.arange(len(m_list))
@@ -132,12 +139,12 @@ def compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None
         plt.bar(xticks, acts_grad, width, label='grad')
         plt.bar(xticks + width, acts_normal, width, label='normal')
         plt.bar(xticks + 2 * width, acts_mult, width, label='mult')
-        plt.ylabel('Activation')
+        plt.ylabel('No. of Active Branches')
         plt.xticks(ticks=xticks, labels=x_vals)
         plt.xlabel(x_label)
         plt.legend()
 
-    return specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult
+    return specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult
 
 
 
@@ -145,9 +152,10 @@ if __name__ == '__main__':
 
     m =  1024
     l = 8
-    k = 8
+    k = 2
     maxlogk = 4  # 5
     maxlogl = 6
+    num_expr = 10
 
     distribution_mode_list = ['grad', 'normal', 'mult']  # distribution_mode_list = ['iid', 'mult']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -160,7 +168,77 @@ if __name__ == '__main__':
     l_list_2 = [2 ** elem for elem in range(1, maxlogl)]
     m_list_2 = [m] * len(l_list_2)
     k_list_2 = [k] * len(l_list_2)
-    specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along='l')
+
+    show_along = 'l'
+    specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+    show_along = None
+
+    specs_grad_expr = []
+    specs_normal_expr = []
+    specs_mult_expr = []
+    acts_grad_expr = []
+    acts_normal_expr = []
+    acts_mult_expr = []
+    for _ in range(num_expr):
+        specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+        specs_grad_expr += [specs_grad]
+        specs_normal_expr += [specs_normal]
+        specs_mult_expr += [specs_mult]
+        acts_grad_expr += [acts_grad]
+        acts_normal_expr += [acts_normal]
+        acts_mult_expr += [acts_mult]
+
+    def helper_mean_var(measure_expr):
+        measure_expr = np.stack(measure_expr, axis=1)
+        measure_mean = np.mean(measure_expr, axis=1)
+        measure_var = np.var(measure_expr, axis=1)
+        return measure_mean, measure_var
+
+    specs_mult_mean, specs_mult_var = helper_mean_var(specs_mult_expr)
+    acts_mult_mean, acts_mult_var = helper_mean_var(acts_mult_expr)
+    specs_grad_mean, specs_grad_var = helper_mean_var(specs_grad_expr)
+    acts_grad_mean, acts_grad_var = helper_mean_var(acts_grad_expr)
+    specs_normal_mean, specs_normal_var = helper_mean_var(specs_normal_expr)
+    acts_normal_mean, acts_normal_var = helper_mean_var(acts_normal_expr)
+
+    plt.figure()
+    def helper_plot_with_shaded_error_region(y, y_var, label, x=None):
+        error = 0.5 * np.sqrt(y_var)
+        if x is None:
+            x = range(y.shape[0])
+        plt.plot(x, y, label=label)
+        plt.fill_between(x, y - error, y + error, alpha=0.5)
+
+    xticks = np.arange(len(l_list_2))
+    x_vals = l_list_2
+    x_label = 'No. of Branches'
+
+    plt.subplot(1, 2, 1)
+    helper_plot_with_shaded_error_region(specs_grad_mean, specs_grad_var, label='grad', x=xticks)
+    helper_plot_with_shaded_error_region(specs_normal_mean, specs_normal_var, label='normal', x=xticks)
+    helper_plot_with_shaded_error_region(specs_mult_mean, specs_mult_var, label='mult', x=xticks)
+    plt.ylabel('Specialization')
+    plt.xticks(ticks=xticks, labels=x_vals)
+    plt.xlabel(x_label)
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    # helper_plot_with_shaded_error_region(acts_grad_mean, acts_grad_var, label='grad', x=None)
+    # helper_plot_with_shaded_error_region(acts_normal_mean, acts_normal_var, label='normal', x=None)
+    # helper_plot_with_shaded_error_region(acts_mult_mean, acts_mult_var, label='mult', x=None)
+    # plt.ylabel('No. of Active Branches')
+    # plt.xticks(ticks=xticks, labels=x_vals)
+    # plt.xlabel(x_label)
+    # plt.legend()
+
+    width = 0.1
+    plt.bar(xticks, acts_grad, width, yerr=0.5*np.sqrt(acts_grad_var), label='grad')
+    plt.bar(xticks + width, acts_normal, width, yerr=0.5*np.sqrt(acts_normal_var),label='normal')
+    plt.bar(xticks + 2 * width, acts_mult, width, yerr=0.5*np.sqrt(acts_mult_var), label='mult')
+    plt.ylabel('No. of Active Branches')
+    plt.xticks(ticks=xticks, labels=x_vals)
+    plt.xlabel(x_label)
+    plt.legend()
 
     # 1) compare along increasing width of each bbanch
     k_list_1 = [2 ** elem for elem in range(maxlogk)]
