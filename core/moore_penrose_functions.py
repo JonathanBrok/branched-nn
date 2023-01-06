@@ -3,54 +3,7 @@ from models.linearized_model import BranchedLinearizedModel
 import torch
 from matplotlib import pyplot as plt
 
-
-
-def branch_correlation(out_branches_list):
-    """
-    :param out_branches_list: a list of same-size tensors or numpy arrays
-    :return: correlation matrix (numpy array) between list elements
-    """
-
-    # if pytorch tensor, then convert to numpy array
-    if torch.is_tensor(out_branches_list[0]):
-        out_branches_list = [b.cpu().detach().numpy() for b in out_branches_list]
-
-    out_branches_list_flat = [np.ndarray.flatten(b) for b in out_branches_list]
-    out_branches_flat_mat = np.stack(out_branches_list_flat, axis=1)
-
-    c = np.cov(out_branches_flat_mat.T)
-
-    return c
-
-
-def specialization(out_branches_list, return_additional_measures=False):
-    """
-    :param out_branches_list: a list of same-size pytorch-tensors or numpy-arrays
-    :param return_additional_measures: whether to return extra meaures (currently unused in our scripts)
-    :return: Branch Correlation as well as Specialization measures(s)
-    """
-
-    num_branches = len(out_branches_list)
-
-
-
-    c = branch_correlation(out_branches_list)
-
-    # new definition (same logic as old, but linearly mapped to [0, 1])
-    spec = (num_branches - np.sum(c ** 2) / np.sum(np.diag(c) ** 2)) / (num_branches - 1)
-
-    if not return_additional_measures:
-        return spec, c
-    else:
-        # some unused measures
-        local_spec = np.sqrt((np.diag(c)) ** 2 / np.sum(c ** 2, axis=0))
-        importance = np.sqrt(np.diag(c) ** 2 / np.sum(np.diag(c) ** 2))
-
-        act_thresh = 0.1  # threshold of relative activity for a branch to be considered active. 0.1 is the 10% threshold mentioned in the paper, hence hard-coded
-        act = np.sum(np.greater(importance, act_thresh * np.max(importance)))
-
-        return spec, c, local_spec, importance, act
-
+from core.branched_models import specialization
 
 
 def simulate_branched_linearized_mse(a, y):
@@ -147,8 +100,6 @@ def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to
     for out_0_i in out_0:
         target_minus_f0 -= torch.squeeze(out_0_i).data.cpu().numpy()
 
-
-
     grads = list_of_tensors_to_list_of_numpy(grads)
     # y = target - sum(out_0)
 
@@ -159,18 +110,73 @@ def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to
         x, y_hat = [], []
     x_thry, y_thry_hat = simulate_theoretical_branched_linearized_mse(a=grads, y=target)
 
-    # evaluate specialization
-    num_branches = len(grads)
-
     spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
-
-    plt.figure()
-    plt.plot(x, label='pseudo inverse result')
-    plt.plot(x_thry, '.', label='theoretical equivalent')
-    plt.legend()
-
-    plt.figure()
-    plt.imshow(c)
 
     return target, y_hat, x, y_thry_hat, x_thry, grads, c, spec, act
 
+
+def wrapper_simulate_toy_branched_linearized(m, k, l, distribution_mode):
+    """
+    :param m: No. of  Data samples
+    :param k: No. of Branch Parameters
+    :param l: No. of Branches
+    :return
+        y_hat: Outputs of a linearized toy example "trained" on MSE via pseudo-inverse
+        y: the labels
+    """
+    # toy labels
+    y = np.random.normal(size=(m, 1))
+    # toy gradients
+    a = toy_random_gradients(m, k, l, distribution_mode=distribution_mode)
+    # mse linearized pseudo-inverse solution per-branch
+    x, y_hat = simulate_branched_linearized_mse(a, y)
+
+    x_thry, y_thry_hat = simulate_theoretical_branched_linearized_mse(a, y)
+
+    # evaluate specialization
+    spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
+
+    return y, y_hat, x, y_thry_hat, x_thry, a, c, spec, act
+
+
+def my_cummult(mat, axis=1):
+    """
+    similarly to cumsum, but with elementwise multipication instead of summation.
+    mat is assumed to be a numpy matrix.
+    """
+    if axis == 1:
+        mat = mat.T
+    elif axis != 0:
+        raise ValueError
+    mat_cummult = np.zeros_like(mat)
+    cur_mult = np.ones(mat.shape[1])
+    for r, mat_row in enumerate(mat):
+        cur_mult = cur_mult * mat_row  # element-wise multipication
+        mat_cummult[r, :] = cur_mult
+    if axis == 1:
+        mat_cummult = mat_cummult.T
+    return mat_cummult
+
+
+def toy_random_gradients(m, k, l, distribution_mode='mult'):
+    """
+    Generate random matrices, which are supposed to approximate the gradients of Branched NN at initialization
+    :param m: No. of  Data samples
+    :param k: No. of Branch Parameters
+    :param l: No. of Branches
+    :return: a: a list with l elements where each element is a m X k random matrix corresponding to "toy gradients" of a different branch
+    Remark: As in practical NNs, Gradients for each branch are iid (but inter-branch gradients may be dependent, as is the case in branched NNs)
+    """
+    a = []
+    for i in range(l):
+        rand_gradient = np.random.random((m, k))
+        if distribution_mode == 'summed':
+            rand_gradient = np.cumsum(rand_gradient, axis=1)
+        elif distribution_mode == 'mult':
+            rand_gradient = my_cummult(rand_gradient, axis=1)
+        elif distribution_mode != 'normal':
+            raise ValueError
+        # else its iid, and does not need additional processing
+        a.append(rand_gradient)
+
+    return a

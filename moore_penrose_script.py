@@ -1,4 +1,3 @@
-import matplotlib.pyplot as plt
 from core.branched_models import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
@@ -6,199 +5,166 @@ from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 from core.moore_penrose_functions import *
 
 
-def toy_random_gradients(m, k, l, distribution_mode='mult'):
+def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eigenvals=False):
     """
-    Generate random matrices, which are supposed to approximate the gradients of Branched NN at initialization
-    :param m: No. of  Data samples
-    :param k: No. of Branch Parameters
-    :param l: No. of Branches
-    :return: a: a list with l elements where each element is a m X k random matrix corresponding to "toy gradients" of a different branch
-    Remark: As in practical NNs, Gradients for each branch are iid (but inter-branch gradients may be dependent, as is the case in branched NNs)
+    compares properties of the Branched Moore-Penrose solution for a specific value of m,, k, l  
     """
-    a = []
-    for i in range(l):
-        rand_gradient = np.random.random((m, k))
-        if distribution_mode == 'summed':
-            rand_gradient = np.cumsum(rand_gradient, axis=1)
-        elif distribution_mode == 'mult':
-            rand_gradient = my_cummult(rand_gradient, axis=1)
-        elif distribution_mode != 'normal':
-            raise ValueError
-        # else its iid, and does not need additional processing
-        a.append(rand_gradient)
+    # branched nn
+    def constructor():
+        return Net(softmax_output=False, num_classes=1, first_width=k).to(device)
 
-    return a
+    branched_net = NetBranched(branch_constructor=constructor, num_branches=l).to(device)
+
+    y_grad, y_hat_grad, x_grad, y_thry_hat_grad, x_thry_grad, a_grad, c_grad, spec_grad, act_grad = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
+
+    # get No. of parameters in branch of branched nn
+    branch_0 = branched_net.branches[0]
+    num_branch_params = sum(p.numel() for p in branch_0.parameters())  # or equivalently, a[0].shape[1]
+    # declare No. of parameters in toy gradient
+    num_toy_params = 10 * k
+    # calculate No. of samples for toy, keeping sample to param ratio the same as in the branched nn case
+    num_toy_samples = round(m * num_toy_params / num_branch_params)
+
+    y_normal, y_hat_normal, x_normal, y_thry_hat_normal, x_thry_normal, a_normal, c_normal, spec_normal, act_normal = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='normal')
+
+    y_mult, y_hat_mult, x_mult, y_thry_hat_mult, x_thry_mult, a_mult, c_mult, spec_mult, act_mult = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='mult')
+
+    print('l: {}, m: {}, k: {}, spec grad: {}, act grad {}'.format(l, m, k, spec_grad, act_grad))
+    print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal, act_normal))
+    print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult, act_mult))
+
+    if do_show:
+        plt.figure()
+        plt.subplot(3, 2, 1)
+        plt.plot(x_normal, label='pseudo inverse result')
+        plt.plot(x_thry_normal, '.', label='theoretical equivalent')
+        plt.title('normal, l={}, k={}, m={}'.format(l, k, m))
+        plt.legend()
+        plt.subplot(3, 2, 2)
+        plt.imshow(c_normal)
+        plt.colorbar()
+
+        plt.subplot(3, 2, 3)
+        plt.plot(x_mult, label='pseudo inverse result')
+        plt.plot(x_thry_mult, '.', label='theoretical equivalent')
+        plt.title('mult, l={}, k={}, m={}'.format(l, k, m))
+        plt.legend()
+        plt.subplot(3, 2, 4)
+        plt.imshow(c_mult)
+        plt.colorbar()
+
+        plt.subplot(3, 2, 5)
+        plt.plot(x_grad, label='pseudo inverse result')
+        plt.plot(x_thry_grad, '.', label='theoretical equivalent')
+        plt.title('grad, l={}, k={}, m={}'.format(l, k, m))
+        plt.legend()
+        plt.subplot(3, 2, 6)
+        plt.imshow(c_grad)
+        plt.colorbar()
+
+        if calc_eigenvals:
+            a_total = np.concatenate(a, axis=1)
+            u, s, vh = np.linalg.svd(a_total)
+            eigenvals += [s]
+
+            plt.figure()
+            plt.subplot(len(ms), 3, 3 * i + 2 + j)
+            for k, s in zip(ks, eigenvals):
+                plt.plot(s)
+            plt.legend(['# Branch Params.: ' + str(k) for k in ks])
+            plt.title('Eigen Values')
+
+    return spec_grad, spec_normal, spec_mult, act_grad, act_normal, act_mult
 
 
-def my_cummult(mat, axis=1):
+def compare_grad_normal_mult(m_list, k_list, l_ist, testloader, show_along=None):
     """
-    similarly to cumsum, but with elementwise multipication instead of summation.
-    mat is assumed to be a numpy matrix.
+    Plots Specialization and Activation as function of the zipped values. (each of the cases normal, mult and grad has an individual plot).
     """
-    if axis == 1:
-        mat = mat.T
-    elif axis != 0:
-        raise ValueError
-    mat_cummult = np.zeros_like(mat)
-    cur_mult = np.ones(mat.shape[1])
-    for r, mat_row in enumerate(mat):
-        cur_mult = cur_mult * mat_row  # element-wise multipication
-        mat_cummult[r, :] = cur_mult
-    if axis == 1:
-        mat_cummult = mat_cummult.T
-    return mat_cummult
 
+    # analyze
+    specs_grad = []
+    specs_normal = []
+    specs_mult = []
+    acts_grad = []
+    acts_normal = []
+    acts_mult = []
+    for m, k, l in zip(m_list, k_list, l_ist):
+        spec_grad_cur, spec_normal_cur, spec_mult_cur, act_grad_cur, act_normal_cur, act_mult_cur = compare_grad_normal_mult_helper(m, k, l, testloader)
+
+        specs_grad.append(spec_grad_cur)
+        specs_normal.append(spec_normal_cur)
+        specs_mult.append(spec_mult_cur)
+        acts_grad.append(act_grad_cur)
+        acts_normal.append(act_normal_cur)
+        acts_mult.append(act_mult_cur)
+
+    if show_along is not None:
+        if show_along == 'm':
+            xticks = range(len(m_list))
+            x_vals = m_list
+            x_label = 'No. of Samples'
+        elif show_along == 'k':
+            xticks = range(len(k_list))
+            x_vals = k_list
+            x_label = 'Branch Width Factor'
+        elif show_along == 'l':
+            xticks = range(len(l_list))
+            x_vals = l_list
+            x_label = 'No. of Branches'
+
+        plt.figure()
+        plt.subplot(1, 2, 1)
+        plt.plot(specs_grad, label='grad')
+        plt.plot(specs_normal, label='normal')
+        plt.plot(specs_mult, label='mult')
+        plt.ylabel('Specialization')
+        plt.xticks(ticks=xticks, labels=x_vals)
+        plt.xlabel(x_label)
+
+        plt.legend()
+
+
+        plt.subplot(1, 2, 2)
+        width = 0.1
+        plt.bar(np.arange(maxlogk), acts_grad, width, label='grad')
+        plt.bar(np.arange(maxlogk) + width, acts_normal, width, label='normal')
+        plt.bar(np.arange(maxlogk) + 2 * width, acts_mult, width, label='mult')
+        plt.ylabel('Activation')
+        plt.xticks(ticks=xticks, labels=x_vals)
+        plt.xlabel(x_label)
+        plt.legend()
+
+    return specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult
 
 
 
 if __name__ == '__main__':
 
-    ms =  [1024]
+    m =  1024
     l = 8
-    maxlogk = 5  # 10
+    k = 16
+    maxlogk = 4  # 5
+    maxlogl = 4
+
     distribution_mode_list = ['grad', 'normal', 'mult']  # distribution_mode_list = ['iid', 'mult']
-    calc_eigenvals = False  # set False to avoid expensive calculations
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    # data, target = get_mnist_45_batch(batch_size=batch_size)
+    two_class = True  # only 4 and 5 digits (works with scalar output)
+    trainloader, testloader = get_mnist_loaders(train_batch_size=m, test_batch_size=m, device=device, two_class=two_class)
 
+    # 1) compare along increasing width of each bbanch
+    k_list_1 = [2 ** elem for elem in range(maxlogk)]
+    m_list_1 = [m] * len(k_list_1)
+    l_list_1 = [l] * len(k_list_1)
+    specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1, k_list_1, l_list_1, testloader, show_along='k')
 
-
-
-    def wrapper_simulate_toy_branched_linearized(m, k, l, distribution_mode='mult'):
-        """
-        :param m: No. of  Data samples
-        :param k: No. of Branch Parameters
-        :param l: No. of Branches
-        :return
-            y_hat: Outputs of a linearized toy example "trained" on MSE via pseudo-inverse
-            y: the labels
-        """
-        # toy labels
-        y = np.random.normal(size=(m, 1))
-        # toy gradients
-        a = toy_random_gradients(m, k, l, distribution_mode=distribution_mode)
-        # mse linearized pseudo-inverse solution per-branch
-        x, y_hat = simulate_branched_linearized_mse(a, y)
-
-        x_thry, y_thry_hat = simulate_theoretical_branched_linearized_mse(a, y)
-
-        # evaluate specialization
-        spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
-
-
-
-        plt.figure()
-        plt.plot(x, label='pseudo inverse result')
-        plt.plot(x_thry, '.', label='theoretical equivalent')
-        plt.legend()
-
-        plt.figure()
-        plt.imshow(c)
-        plt.colorbar()
-
-        return y, y_hat, x, y_thry_hat, x_thry, a, c, spec, act
-
-    plt.figure(101)
-    if distribution_mode_list[0] == 'grad':
-        num_toy_samples = []
-    for i, m in enumerate(ms):
-        # set
-        ks = [2 ** logk for logk in range(maxlogk)]
-        rs = [1 / l for _ in range(len(ks))]
-        specs = []
-        eigenvals = []
-
-        # data, target = get_mnist_45_batch(batch_size=batch_size)
-        two_class = True  # only 4 and 5 digits (works with scalar output)
-        trainloader, testloader = get_mnist_loaders(train_batch_size=m, test_batch_size=m, device=device, two_class=two_class)
-
-
-        # analyze
-        specs_grad = []
-        specs_normal = []
-        specs_mult = []
-
-        acts_grad = []
-        acts_normal = []
-        acts_mult = []
-
-        for k in ks:
-
-
-
-            # branched nn
-            def constructor():
-                return Net(softmax_output=False, num_classes=1, first_width=k).to(device)
-            branched_net = NetBranched(branch_constructor=constructor, num_branches=l).to(device)
-
-
-            _, _, _, _, _, _, _, spec_grad_cur, act_grad_cur = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
-
-            # get No. of parameters in branch of branched nn
-            branch_0 = branched_net.branches[0]
-            num_branch_params = sum(p.numel() for p in branch_0.parameters())  # or equivalently, a[0].shape[1]
-            # declare No. of parameters in toy gradient
-            num_toy_params = 10 * k
-            # calculate No. of samples for toy, keeping sample to param ratio the same as in the branched nn case
-            num_toy_samples = round(m * num_toy_params / num_branch_params)
-
-            print('k')
-            print(k)
-            print('num_branch_params')
-            print(num_branch_params)
-            print('num_toy_samples (not rounded)')
-            print(m * k / num_branch_params)
-
-            _, _, _, _, _, _, _, spec_normal_cur, act_normal_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='normal')
-
-            _, _, _, _, _, _, _, spec_mult_cur, act_mult_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='mult')
-
-            specs_grad.append(spec_grad_cur)
-            specs_normal.append(spec_normal_cur)
-            specs_mult.append(spec_mult_cur)
-            acts_grad.append(act_grad_cur)
-            acts_normal.append(act_normal_cur)
-            acts_mult.append(act_mult_cur)
-
-            print('l: {}, m: {}, k: {}, spec grad: {}, act grad{}'.format(l, m, k, spec_grad_cur, act_grad_cur))
-            print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal_cur, act_normal_cur))
-            print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult_cur, act_mult_cur))
-
-            if calc_eigenvals:
-                a_total = np.concatenate(a, axis=1)
-                u, s, vh = np.linalg.svd(a_total)
-                eigenvals += [s]
-
-                plt.figure()
-                plt.subplot(len(ms), 3, 3 * i + 2 + j)
-                for k, s in zip(ks, eigenvals):
-                    plt.plot(s)
-                plt.legend(['# Branch Params.: ' + str(k) for k in ks])
-                plt.title('Eigen Values')
-
-        plt.figure(101)
-        plt.subplot(1, 2, 1)
-        plt.plot(specs_grad, label='grad')
-        plt.plot(specs_normal, label='normal')
-        plt.plot(specs_mult, label='mult')
-
-        plt.xticks(ticks=range(maxlogk), labels=ks)
-        plt.xlabel('Branch Width Factor')
-        plt.ylabel('Specialization')
-        plt.legend()
-
-        plt.subplot(1, 2, 2)
-        width=0.1
-        plt.bar(np.arange(maxlogk), acts_grad, width, label='grad')
-        plt.bar(np.arange(maxlogk) + width, acts_normal, width, label='normal')
-        plt.bar(np.arange(maxlogk) + 2*width, acts_mult, width, label='mult')
-
-
-
-        # plt.xticks(ticks=range(maxlogk), labels=ks)
-        plt.xlabel('Branch Width Factor')
-        plt.ylabel('Activation')
-        plt.legend()
+    # 2) compare along increasing No. of branches
+    l_list_2 = [2 ** elem for elem in range(maxlogl)]
+    m_list_2 = [m] * len(l_list_2)
+    k_list_2 = [k] * len(l_list_2)
+    specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along='m')
 
     # save
     # plt.savefig('spec_normal_rand_linearized.png', dpi=600)
