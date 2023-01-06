@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-from models.branched_models import NetBranched
+from core.branched_models import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 
@@ -83,7 +83,9 @@ if __name__ == '__main__':
         x_thry, y_thry_hat = simulate_theoretical_branched_linearized_mse(a, y)
 
         # evaluate specialization
-        spec, c = specialization(y_hat)
+        spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
+
+
 
         plt.figure()
         plt.plot(x, label='pseudo inverse result')
@@ -92,8 +94,9 @@ if __name__ == '__main__':
 
         plt.figure()
         plt.imshow(c)
+        plt.colorbar()
 
-        return y, y_hat, x, y_thry_hat, x_thry, a, c, spec
+        return y, y_hat, x, y_thry_hat, x_thry, a, c, spec, act
 
     plt.figure(101)
     if distribution_mode_list[0] == 'grad':
@@ -114,22 +117,30 @@ if __name__ == '__main__':
         specs_grad = []
         specs_normal = []
         specs_mult = []
+
+        acts_grad = []
+        acts_normal = []
+        acts_mult = []
+
         for k in ks:
 
 
 
             # branched nn
             def constructor():
-                return Net(softmax_output=False, num_classes=1, first_depth=k).to(device)
+                return Net(softmax_output=False, num_classes=1, first_width=k).to(device)
             branched_net = NetBranched(branch_constructor=constructor, num_branches=l).to(device)
 
 
-            y, y_hat, x, y_thry_hat, x_thry, a, c, spec_grad_cur = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
+            _, _, _, _, _, _, _, spec_grad_cur, act_grad_cur = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
 
-
+            # get No. of parameters in branch of branched nn
+            branch_0 = branched_net.branches[0]
+            num_branch_params = sum(p.numel() for p in branch_0.parameters())  # or equivalently, a[0].shape[1]
+            # declare No. of parameters in toy gradient
             num_toy_params = 10 * k
-            num_branch_params = a[0].shape[1]
-            num_toy_samples = round(m * num_toy_params / num_branch_params)  # keep sample to param ratio the same as in the branched nn case
+            # calculate No. of samples for toy, keeping sample to param ratio the same as in the branched nn case
+            num_toy_samples = round(m * num_toy_params / num_branch_params)
 
             print('k')
             print(k)
@@ -138,17 +149,20 @@ if __name__ == '__main__':
             print('num_toy_samples (not rounded)')
             print(m * k / num_branch_params)
 
-            y, y_hat, x, y_thry_hat, x_thry, a, c, spec_normal_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='normal')
+            _, _, _, _, _, _, _, spec_normal_cur, act_normal_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='normal')
 
-            y, y_hat, x, y_thry_hat, x_thry, a, c, spec_mult_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='mult')
+            _, _, _, _, _, _, _, spec_mult_cur, act_mult_cur = wrapper_simulate_toy_branched_linearized(num_toy_samples, num_toy_params, l, distribution_mode='mult')
 
             specs_grad.append(spec_grad_cur)
             specs_normal.append(spec_normal_cur)
             specs_mult.append(spec_mult_cur)
+            acts_grad.append(act_grad_cur)
+            acts_normal.append(act_normal_cur)
+            acts_mult.append(act_mult_cur)
 
-            print('l: {}, m: {}, k: {}, spec grad: {}'.format(l, m, k, spec_grad_cur))
-            print('l: {}, m: {}, k: {}, spec normal: {}'.format(l, m, k, spec_normal_cur))
-            print('l: {}, m: {}, k: {}, spec mult: {}'.format(l, m, k, spec_mult_cur))
+            print('l: {}, m: {}, k: {}, spec grad: {}, act grad{}'.format(l, m, k, spec_grad_cur, act_grad_cur))
+            print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal_cur, act_normal_cur))
+            print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult_cur, act_mult_cur))
 
             if calc_eigenvals:
                 a_total = np.concatenate(a, axis=1)
@@ -163,7 +177,7 @@ if __name__ == '__main__':
                 plt.title('Eigen Values')
 
         plt.figure(101)
-
+        plt.subplot(1, 2, 1)
         plt.plot(specs_grad, label='grad')
         plt.plot(specs_normal, label='normal')
         plt.plot(specs_mult, label='mult')
@@ -171,6 +185,19 @@ if __name__ == '__main__':
         plt.xticks(ticks=range(maxlogk), labels=ks)
         plt.xlabel('Branch Width Factor')
         plt.ylabel('Specialization')
+        plt.legend()
+
+        plt.subplot(1, 2, 2)
+        width=0.1
+        plt.bar(np.arange(maxlogk), acts_grad, width, label='grad')
+        plt.bar(np.arange(maxlogk) + width, acts_normal, width, label='normal')
+        plt.bar(np.arange(maxlogk) + 2*width, acts_mult, width, label='mult')
+
+
+
+        # plt.xticks(ticks=range(maxlogk), labels=ks)
+        plt.xlabel('Branch Width Factor')
+        plt.ylabel('Activation')
         plt.legend()
 
     # save

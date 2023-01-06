@@ -45,7 +45,11 @@ def specialization(out_branches_list, return_additional_measures=False):
         # some unused measures
         local_spec = np.sqrt((np.diag(c)) ** 2 / np.sum(c ** 2, axis=0))
         importance = np.sqrt(np.diag(c) ** 2 / np.sum(np.diag(c) ** 2))
-        return spec, c, local_spec, importance
+
+        act_thresh = 0.1  # threshold of relative activity for a branch to be considered active. 0.1 is the 10% threshold mentioned in the paper, hence hard-coded
+        act = np.sum(np.greater(importance, act_thresh * np.max(importance)))
+
+        return spec, c, local_spec, importance, act
 
 
 
@@ -158,7 +162,7 @@ def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to
     # evaluate specialization
     num_branches = len(grads)
 
-    spec, c = specialization(y_hat)
+    spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
 
     plt.figure()
     plt.plot(x, label='pseudo inverse result')
@@ -168,5 +172,5 @@ def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to
     plt.figure()
     plt.imshow(c)
 
-    return target, y_hat, x, y_thry_hat, x_thry, grads, c, spec
+    return target, y_hat, x, y_thry_hat, x_thry, grads, c, spec, act
 

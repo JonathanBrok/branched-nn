@@ -3,7 +3,7 @@ import copy
 from functorch import make_functional_with_buffers, vmap, jacrev
 import torch
 
-from models.branched_models import SuperNetBranched
+from core.branched_models import SuperNetBranched
 
 def zeroize_weights(model):
     state_dict = model.state_dict()
