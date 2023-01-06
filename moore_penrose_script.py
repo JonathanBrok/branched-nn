@@ -77,10 +77,12 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
     return spec_grad, spec_normal, spec_mult, act_grad, act_normal, act_mult
 
 
-def compare_grad_normal_mult(m_list, k_list, l_ist, testloader, show_along=None):
+def compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None):
     """
     Plots Specialization and Activation as function of the zipped values. (each of the cases normal, mult and grad has an individual plot).
     """
+    if show_along is not None:
+        assert show_along in ('m', 'l', 'k')
 
     # analyze
     specs_grad = []
@@ -89,7 +91,7 @@ def compare_grad_normal_mult(m_list, k_list, l_ist, testloader, show_along=None)
     acts_grad = []
     acts_normal = []
     acts_mult = []
-    for m, k, l in zip(m_list, k_list, l_ist):
+    for m, k, l in zip(m_list, k_list, l_list):
         spec_grad_cur, spec_normal_cur, spec_mult_cur, act_grad_cur, act_normal_cur, act_mult_cur = compare_grad_normal_mult_helper(m, k, l, testloader)
 
         specs_grad.append(spec_grad_cur)
@@ -101,15 +103,15 @@ def compare_grad_normal_mult(m_list, k_list, l_ist, testloader, show_along=None)
 
     if show_along is not None:
         if show_along == 'm':
-            xticks = range(len(m_list))
+            xticks = np.arange(len(m_list))
             x_vals = m_list
             x_label = 'No. of Samples'
         elif show_along == 'k':
-            xticks = range(len(k_list))
+            xticks = np.arange(len(k_list))
             x_vals = k_list
             x_label = 'Branch Width Factor'
         elif show_along == 'l':
-            xticks = range(len(l_list))
+            xticks = np.arange(len(l_list))
             x_vals = l_list
             x_label = 'No. of Branches'
 
@@ -127,9 +129,9 @@ def compare_grad_normal_mult(m_list, k_list, l_ist, testloader, show_along=None)
 
         plt.subplot(1, 2, 2)
         width = 0.1
-        plt.bar(np.arange(maxlogk), acts_grad, width, label='grad')
-        plt.bar(np.arange(maxlogk) + width, acts_normal, width, label='normal')
-        plt.bar(np.arange(maxlogk) + 2 * width, acts_mult, width, label='mult')
+        plt.bar(xticks, acts_grad, width, label='grad')
+        plt.bar(xticks + width, acts_normal, width, label='normal')
+        plt.bar(xticks + 2 * width, acts_mult, width, label='mult')
         plt.ylabel('Activation')
         plt.xticks(ticks=xticks, labels=x_vals)
         plt.xlabel(x_label)
@@ -143,9 +145,9 @@ if __name__ == '__main__':
 
     m =  1024
     l = 8
-    k = 16
+    k = 8
     maxlogk = 4  # 5
-    maxlogl = 4
+    maxlogl = 6
 
     distribution_mode_list = ['grad', 'normal', 'mult']  # distribution_mode_list = ['iid', 'mult']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -154,17 +156,19 @@ if __name__ == '__main__':
     two_class = True  # only 4 and 5 digits (works with scalar output)
     trainloader, testloader = get_mnist_loaders(train_batch_size=m, test_batch_size=m, device=device, two_class=two_class)
 
+    # 2) compare along increasing No. of branches
+    l_list_2 = [2 ** elem for elem in range(1, maxlogl)]
+    m_list_2 = [m] * len(l_list_2)
+    k_list_2 = [k] * len(l_list_2)
+    specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along='l')
+
     # 1) compare along increasing width of each bbanch
     k_list_1 = [2 ** elem for elem in range(maxlogk)]
     m_list_1 = [m] * len(k_list_1)
     l_list_1 = [l] * len(k_list_1)
     specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1, k_list_1, l_list_1, testloader, show_along='k')
 
-    # 2) compare along increasing No. of branches
-    l_list_2 = [2 ** elem for elem in range(maxlogl)]
-    m_list_2 = [m] * len(l_list_2)
-    k_list_2 = [k] * len(l_list_2)
-    specs_grad, specs_normal, specs_mult,acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along='m')
+
 
     # save
     # plt.savefig('spec_normal_rand_linearized.png', dpi=600)
