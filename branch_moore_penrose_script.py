@@ -1,4 +1,4 @@
-from core.branched_models import NetBranched
+from core.branched_model_classes import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 

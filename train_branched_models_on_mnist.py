@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 from models.linearized_model import BranchedLinearizedModel
 from models.models import *
-from core.branched_models import *
+from core.branched_model_classes import *
 from core.branch_specialization_measures import get_branch_specialization_measures
 
 
