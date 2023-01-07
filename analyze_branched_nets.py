@@ -10,7 +10,7 @@ from train_branched_models_on_mnist import test as test_mnist
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 from train_branched_models_on_mnist import get_net_criterion as get_net_criterion_mnist
 
-from core.moore_penrose_functions import moore_penrose_analysis_for_branched_net
+from core.branch_moore_penrose_functions import moore_penrose_analysis_for_branched_net
 
 from utils.other_utils import MyMSELOSS
 
@@ -272,7 +272,8 @@ if __name__ == '__main__':
     # analyze pt. 2
     if net.num_classes == 1:
         compare_to_thry = False
-        y, y_hat, x, y_thry_hat, x_thry, a, c, spec = moore_penrose_analysis_for_branched_net(net_init, testloader, compare_to_thry, device)
+        y, y_hat, x, y_thry_hat, x_thry, a, c, spec, act = moore_penrose_analysis_for_branched_net(net_init, testloader, compare_to_thry, device)
+
         plt.figure()
         plt.plot(x_thry, '.', label='theoretical equivalent')
         if compare_to_thry:

@@ -2,7 +2,7 @@ from core.branched_models import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 
-from core.moore_penrose_functions import *
+from core.branch_moore_penrose_functions import *
 
 
 def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eigenvals=False):

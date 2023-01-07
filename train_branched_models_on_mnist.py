@@ -17,7 +17,7 @@ import matplotlib.pyplot as plt
 from models.linearized_model import BranchedLinearizedModel
 from models.models import *
 from core.branched_models import *
-from core.branched_models import specialization
+from core.branch_specialization_measures import get_branch_specialization_measures
 
 
 def get_net(args, num_classes, device):
@@ -206,7 +206,7 @@ def test(net, device, testloader, criterion, dir_name='', suffix=''):
 
 
     # show correlation and spcialization
-    spec, c = specialization(out_branches_list, return_additional_measures=False)
+    spec, c = get_branch_specialization_measures(out_branches_list, return_additional_measures=False)
 
     
 

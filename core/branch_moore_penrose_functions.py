@@ -3,7 +3,8 @@ from models.linearized_model import BranchedLinearizedModel
 import torch
 from matplotlib import pyplot as plt
 
-from core.branched_models import specialization
+from core.branch_specialization_measures import get_branch_specialization_measures
+
 
 def simulate_branched_linearized_mse(a, y):
     """
@@ -83,7 +84,7 @@ def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to
     x, y_hat = simulate_branched_linearized_mse(a=grads, y=target)
 
 
-    spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
+    spec, c, local_spec, importance, act = get_branch_specialization_measures(y_hat, return_additional_measures=True)
 
     return target, y_hat, x, y_thry_hat, x_thry, grads, c, spec, act
 
@@ -107,7 +108,7 @@ def moore_penrose_analysis_with_toy_gradients(m, k, l, distribution_mode):
     x_thry, y_thry_hat = simulate_theoretical_branched_linearized_mse(a, y)
 
     # evaluate specialization
-    spec, c, local_spec, importance, act = specialization(y_hat, return_additional_measures=True)
+    spec, c, local_spec, importance, act = get_branch_specialization_measures(y_hat, return_additional_measures=True)
 
     return y, y_hat, x, y_thry_hat, x_thry, a, c, spec, act
 
