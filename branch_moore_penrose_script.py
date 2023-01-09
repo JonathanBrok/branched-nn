@@ -1,8 +1,11 @@
 from core.branched_model_classes import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
-
+import random
 from core.branch_moore_penrose_functions import *
+from matplotlib import pyplot as plt
+plt.rcParams.update({'font.size': 15})
+
 
 
 def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eigenvals=False):
@@ -29,11 +32,14 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
 
     y_mult, y_hat_mult, x_mult, y_thry_hat_mult, x_thry_mult, a_mult, c_mult, spec_mult, act_mult = moore_penrose_analysis_with_toy_gradients(num_toy_samples, num_toy_params, l, distribution_mode='mult')
 
-    print('l: {}, m: {}, k: {}, spec grad: {}, act grad {}'.format(l, m, k, spec_grad, act_grad))
-    print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal, act_normal))
-    print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult, act_mult))
+
 
     if do_show:
+
+        print('l: {}, m: {}, k: {}, spec grad: {}, act grad {}'.format(l, m, k, spec_grad, act_grad))
+        print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal, act_normal))
+        print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult, act_mult))
+
         plt.figure()
         plt.subplot(3, 2, 1)
         plt.plot(x_normal, label='pseudo inverse result')
@@ -113,6 +119,7 @@ def compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None
     acts_mult = np.asarray(acts_mult)
 
     if show_along is not None:
+
         if show_along == 'm':
             xticks = np.arange(len(m_list))
             x_vals = m_list
@@ -139,7 +146,7 @@ def compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None
 
 
         plt.subplot(1, 2, 2)
-        width = 0.1
+        width = 0.3
         plt.bar(xticks, acts_grad, width, label='grad')
         plt.bar(xticks + width, acts_normal, width, label='normal')
         plt.bar(xticks + 2 * width, acts_mult, width, label='mult')
@@ -162,7 +169,8 @@ def compare_grad_normal_mult_many_experiments(num_expr, m_list, k_list, l_list, 
     acts_grad_expr = []
     acts_normal_expr = []
     acts_mult_expr = []
-    for _ in range(num_expr):
+    for expr_i in range(num_expr):
+        print('begin experiment {} of {}'.format(expr_i, num_expr))
         specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list, k_list, l_list, testloader, show_along=None)
         specs_grad_expr += [specs_grad]
         specs_normal_expr += [specs_normal]
@@ -217,7 +225,7 @@ def compare_grad_normal_mult_many_experiments(num_expr, m_list, k_list, l_list, 
     plt.legend()
 
     plt.subplot(1, 2, 2)
-    width = 0.1
+    width = 0.3
     plt.bar(xticks, acts_grad, width, yerr=np.sqrt(acts_grad_var), label='grad')
     plt.bar(xticks + width, acts_normal, width, yerr=np.sqrt(acts_normal_var), label='normal')
     plt.bar(xticks + 2 * width, acts_mult, width, yerr=np.sqrt(acts_mult_var), label='mult')
@@ -227,13 +235,12 @@ def compare_grad_normal_mult_many_experiments(num_expr, m_list, k_list, l_list, 
     plt.legend()
 
 if __name__ == '__main__':
-
-    m =  1024  # No. of datasamples
-    l = 8  # No. of branches
-    k = 2  # No. of branch parameters
-    maxlogk = 4  # 5  defines list of k's
-    maxlogl = 7  # defines list of l's
-    num_expr = 10  # No. of experiments to perform for statistics
+    m = 1024  # 1024 No. of datasamples
+    l = 8  # 8 No. of branches
+    k = 2  # 2 No. of branch parameters
+    maxlogk = 4  # 4  defines list of k's
+    maxlogl = 8  # 8 defines list of l's
+    num_expr = 10  # 100 No. of experiments to perform for statistics
 
     distribution_mode_list = ['grad', 'normal', 'mult']  # distribution_mode_list = ['iid', 'mult']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -242,18 +249,24 @@ if __name__ == '__main__':
     two_class = True  # only 4 and 5 digits (works with scalar output)
     trainloader, testloader = get_mnist_loaders(train_batch_size=m, test_batch_size=m, device=device, two_class=two_class)
 
+    random.seed(1)
+
     # 2) compare along increasing No. of branches
     print('analyzing No. of Branches')
-    l_list_2 = [2 ** elem for elem in range(1, maxlogl)]
+    l_list_2 = [2 ** elem for elem in range(2, maxlogl)]
     m_list_2 = [m] * len(l_list_2)
     k_list_2 = [k] * len(l_list_2)
     show_along = 'l'
+
+
+
+    compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+
     specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2,
                                                                                                        k_list_2,
                                                                                                        l_list_2,
                                                                                                        testloader,
                                                                                                        show_along=show_along)
-    compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
 
     # 1) compare along increasing width of each bbanch
     print('analyzing width')
@@ -261,10 +274,16 @@ if __name__ == '__main__':
     m_list_1 = [m] * len(k_list_1)
     l_list_1 = [l] * len(k_list_1)
     show_along = 'k'
-    specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1, k_list_1, l_list_1, testloader, show_along=show_along)
+
+
+
     compare_grad_normal_mult_many_experiments(num_expr, m_list_1, k_list_1, l_list_1, testloader, show_along=show_along)
 
-
+    specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1,
+                                                                                                       k_list_1,
+                                                                                                       l_list_1,
+                                                                                                       testloader,
+                                                                                                       show_along=show_along)
 
     # save
     # plt.savefig('spec_normal_rand_linearized.png', dpi=600)

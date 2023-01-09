@@ -1,7 +1,6 @@
 import numpy as np
 import torch
 
-
 def branch_correlation(out_branches_list):
     """
     :param out_branches_list: a list of same-size tensors or numpy arrays
