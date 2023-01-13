@@ -40,8 +40,73 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
         print('l: {}, m: {}, k: {}, spec normal: {}, act normal {}'.format(l, m, k, spec_normal, act_normal))
         print('l: {}, m: {}, k: {}, spec mult: {}, act mult {}'.format(l, m, k, spec_mult, act_mult))
 
+        if l == 8:
+            plt.figure()
+            plt.imshow(c_normal)
+            plt.colorbar()
+            plt.title('corr, normal')
+            plt.figure()
+            max_val = np.max(np.concatenate(y_hat_normal))
+            min_val = np.min(np.concatenate(y_hat_normal))
+            for ind, (y_hat_cur, y_thry_hat_cur) in enumerate(zip(y_hat_normal, y_thry_hat_normal)):
+                plt.subplot(l, 1, ind + 1 + 0*l)
+                plt.plot(y_hat_cur[:16], label='full mp')
+                plt.plot(y_thry_hat_cur[:16], '.', label='our branch mp')
+                # plt.title('normal, l={}, k={}, m={}'.format(l, k, m))
+                plt.ylabel('B ' + str(ind + 1))
+                plt.ylim((min_val, max_val))
+                if ind == 0:
+                    plt.legend(loc='center', bbox_to_anchor=(0, 1.7))
+                if ind != l-1:
+                    plt.xticks([], [])
+
+
+
+
+            plt.figure()
+            plt.imshow(c_mult)
+            plt.colorbar()
+            plt.title('corr, mult')
+            plt.figure()
+            max_val = np.max(np.concatenate(y_hat_mult))
+            min_val = np.min(np.concatenate(y_hat_mult))
+            for ind, (y_hat_cur, y_thry_hat_cur) in enumerate(zip(y_hat_mult, y_thry_hat_mult)):
+                plt.subplot(l, 1, ind + 1 + 0*l)
+                plt.plot(y_hat_cur[:16], label='full mp')
+                plt.plot(y_thry_hat_cur[:16], '.', label='our branch mp')
+                # plt.title('mult, l={}, k={}, m={}'.format(l, k, m))
+                plt.ylabel('B ' + str(ind + 1))
+                plt.ylim((min_val, max_val))
+                if ind == 0:
+                    plt.legend(loc='center', bbox_to_anchor=(0, 1.7))
+                if ind != l-1:
+                    plt.xticks([], [])
+                else:
+                    plt.xlabel('samples')
+
+            plt.figure()
+            plt.imshow(c_grad)
+            plt.colorbar()
+            plt.title('corr, grad')
+            plt.figure()
+            max_val = np.max(np.concatenate(y_hat_grad))
+            min_val = np.min(np.concatenate(y_hat_grad))
+            for ind, (y_hat_cur, y_thry_hat_cur) in enumerate(zip(y_hat_grad, y_thry_hat_grad)):
+                plt.subplot(l, 1, ind + 1 + 0*l)
+                plt.plot(y_hat_cur[:16], label='full mp')
+                plt.plot(y_thry_hat_cur[:16], '.', label='our branch mp')
+                plt.ylabel('B ' + str(ind + 1))
+                plt.ylim((min_val, max_val))
+                if ind == 0:
+                    plt.legend(loc='center', bbox_to_anchor=(0, 1.7))
+                if ind != l-1:
+                    plt.xticks([], [])
+
+
+            plt.show()
+
         plt.figure()
-        plt.subplot(3, 2, 1)
+        plt.subplot(3, 3, 1)
         plt.plot(x_normal, label='pseudo inverse result')
         plt.plot(x_thry_normal, '.', label='theoretical equivalent')
         plt.title('normal, l={}, k={}, m={}'.format(l, k, m))
@@ -241,6 +306,7 @@ if __name__ == '__main__':
     maxlogk = 4  # 4  defines list of k's
     maxlogl = 8  # 8 defines list of l's
     num_expr = 10  # 100 No. of experiments to perform for statistics
+    perform_many_for_variance_and_mean = False
 
     distribution_mode_list = ['grad', 'normal', 'mult']  # distribution_mode_list = ['iid', 'mult']
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -258,9 +324,8 @@ if __name__ == '__main__':
     k_list_2 = [k] * len(l_list_2)
     show_along = 'l'
 
-
-
-    compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+    if perform_many_for_variance_and_mean:
+        compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
 
     specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2,
                                                                                                        k_list_2,
@@ -277,7 +342,8 @@ if __name__ == '__main__':
 
 
 
-    compare_grad_normal_mult_many_experiments(num_expr, m_list_1, k_list_1, l_list_1, testloader, show_along=show_along)
+    if perform_many_for_variance_and_mean:
+        compare_grad_normal_mult_many_experiments(num_expr, m_list_1, k_list_1, l_list_1, testloader, show_along=show_along)
 
     specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1,
                                                                                                        k_list_1,
