@@ -206,7 +206,7 @@ def test(net, device, testloader, criterion, dir_name='', suffix=''):
 
 
     # show correlation and spcialization
-    spec, c = get_branch_specialization_measures(out_branches_list, return_additional_measures=False)
+    spec, c, local_spec, importance, act = get_branch_specialization_measures(out_branches_list, return_additional_measures=True)
 
     
 
@@ -217,12 +217,11 @@ def test(net, device, testloader, criterion, dir_name='', suffix=''):
         test_loss, correct, len(testloader.dataset),
         100. * test_acc))
     
-    
-    
-    
     plt.figure()
+    max_corr = np.amax(c)
     plt.imshow(c)
     plt.title('Specialization: {}'.format(spec))
+    plt.clim([-max_corr, max_corr])
     plt.colorbar()
     plt.savefig(dir_name + '/corr_spec' + suffix + '.png')
     plt.close()
@@ -237,7 +236,7 @@ def test(net, device, testloader, criterion, dir_name='', suffix=''):
 
     plt.figure()
     plt.imshow(o_sorted)
-    plt.title('Accuracy: {}'.format(correct / len(testloader.dataset)))
+    plt.title('Acc. {} Act. {} Spec. {}'.format(       correct / len(testloader.dataset), act, spec       ))
     plt.colorbar()
     plt.savefig(dir_name + '/branch_out' + suffix + '.png')
     plt.close()
