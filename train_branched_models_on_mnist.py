@@ -218,11 +218,14 @@ def test(net, device, testloader, criterion, dir_name='', suffix=''):
         100. * test_acc))
     
     plt.figure()
-    max_corr = np.amax(c)
+    
     plt.imshow(c)
-    plt.title('Specialization: {}'.format(spec))
-    plt.clim([-max_corr, max_corr])
-    plt.colorbar()
+    plt.xticks([])
+    plt.yticks([])
+    # max_corr = np.amax(c)
+    # plt.clim([-max_corr, max_corr])
+    cbar = plt.colorbar()
+    cbar.ax.tick_params(labelsize=50)    
     plt.savefig(dir_name + '/corr_spec' + suffix + '.png')
     plt.close()
 
@@ -255,7 +258,7 @@ def main(args):
     model_dir_name = 'mnist_runs/{}{}'.format(args.model_type, lin_model)
     if not os.path.exists(model_dir_name):
         os.mkdir(model_dir_name)
-    fname = model_dir_name + '/loss_{}_softmax_{}_lr_sched_{}_lr_{}_twoclass_{}_num_branches_{}_first_width_{}'.format(args.loss, args.softmax_output, args.use_scheduler, args.lr, args.two_class, args.num_branches, args.first_width)
+    fname = model_dir_name + '/run_loss_{}_softmax_{}_lr_sched_{}_lr_{}_twoclass_{}_num_branches_{}_first_width_{}_linearized_{}'.format(args.loss, args.softmax_output, args.use_scheduler, args.lr, args.two_class, args.num_branches, args.first_width, args.linearize_model)
     os.mkdir(fname)
     dir_name = './' + fname
 
