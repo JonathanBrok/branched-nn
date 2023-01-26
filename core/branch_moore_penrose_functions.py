@@ -58,6 +58,47 @@ def simulate_theoretical_branched_linearized_mse(a, y):
     return x, y_hat
 
 
+def get_grads_angles(grads):
+    """
+    :param grads: a list of same-size numpy arrays. of length L
+    :return: grads_cosine: An L x L numpy matrix, where each element is the cosine distance between two flattened elements of grads
+            grads_angles: A list. for every pair of grads, there's a scalar element in the list which is the angle in degrees
+    """
+
+    num_branches = len(grads)
+
+    # correlation
+    grads_flat = [np.ndarray.flatten(g_cur) for g_cur in grads]  # L list of MX1 arrays, where M is th number of elements in each g_cur
+    grads_flat_cat = np.stack(grads_flat, axis=1)  # M x L array
+    grads_corr = np.transpose(grads_flat_cat) @ grads_flat_cat  # L x L array
+
+    # cross-magnitudes
+    grads_mag = [np.sqrt(np.sum(g_cur ** 2)) for g_cur in grads_flat]  # L list
+    grads_mag_cat = np.asarray(grads_mag)  # L array of scalars
+    grads_mag_cat_singleton = grads_mag_cat[:, None]  # L x 1 array
+    grads_mag_cross_matrix = grads_mag_cat_singleton @ np.transpose(grads_mag_cat_singleton)  # L x L array
+
+    # cosine
+    grads_cosine = grads_corr / grads_mag_cross_matrix  # L x L
+    print('grads_cosine.shape')
+    print(grads_cosine.shape)
+    get_upper_tri_as_vector = lambda a, l: a[np.triu_indices(l, k=1)]
+    grads_angles = np.rad2deg(np.arccos(np.abs(get_upper_tri_as_vector(grads_cosine, num_branches))))
+
+    return grads_cosine, grads_angles
+
+
+def construct_grad_out_angle(branched_net, testloader, device):
+    for data, target in testloader:
+        data, target = data.to(device), target.to(device)
+        break  # single batch
+
+    grads, out = get_initial_grad_f(branched_net, data, device)
+    grads = [g_cur.data.cpu().numpy() for g_cur in grads]  # from torch to numpy
+    _, grads_angles = get_grads_angles(grads)
+    return grads, out, grads_angles
+
+
 def moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry, device):
 
     for data, target in testloader:
