@@ -1,16 +1,17 @@
+import math
 from core.branched_model_classes import NetBranched
 from models.models import Net
 from train_branched_models_on_mnist import get_data_loaders as get_mnist_loaders
 import random
 from core.branch_moore_penrose_functions import *
 from matplotlib import pyplot as plt
-plt.rcParams.update({'font.size': 15})
+plt.rcParams.update({'font.size': 20})
 
 
 
 def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eigenvals=False):
     """
-    compares properties of the Branched Moore-Penrose solution for a specific value of m,, k, l  
+    compares properties of the Branched Moore-Penrose solution for a specific value of m,, k, l
     """
     # branched nn
     def constructor():
@@ -18,7 +19,13 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
 
     branched_net = NetBranched(branch_constructor=constructor, num_branches=l).to(device)
 
-    y_grad, y_hat_grad, x_grad, y_thry_hat_grad, x_thry_grad, a_grad, c_grad, spec_grad, act_grad = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
+    repeat = True  # initialize
+    while repeat:
+        y_grad, y_hat_grad, x_grad, y_thry_hat_grad, x_thry_grad, a_grad, c_grad, spec_grad, act_grad = moore_penrose_analysis_for_branched_net(branched_net, testloader, compare_to_thry=True, device=device)
+        repeat = math.isnan(spec_grad)
+        if repeat:
+            print('warning: got a nan, repeating with a different intialization')
+
 
     # get No. of parameters in branch of branched nn
     branch_0 = branched_net.branches[0]
@@ -93,8 +100,8 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
             min_val = np.min(np.concatenate(y_hat_grad))
             for ind, (y_hat_cur, y_thry_hat_cur) in enumerate(zip(y_hat_grad, y_thry_hat_grad)):
                 plt.subplot(l, 1, ind + 1 + 0*l)
-                plt.plot(y_hat_cur[:16], label='full mp')
-                plt.plot(y_thry_hat_cur[:16], '.', label='our branch mp')
+                plt.plot(y_hat_cur[:16], label='full mp', linewidth=4)
+                plt.plot(y_thry_hat_cur[:16], '.', label='our branch mp', markersize=15)
                 plt.ylabel('B ' + str(ind + 1))
                 plt.ylim((min_val, max_val))
                 if ind == 0:
@@ -102,8 +109,6 @@ def compare_grad_normal_mult_helper(m, k, l, testloader, do_show=True, calc_eige
                 if ind != l-1:
                     plt.xticks([], [])
 
-
-            plt.show()
 
         plt.figure()
         plt.subplot(3, 3, 1)
@@ -354,7 +359,7 @@ def compare_grad_normal_mult_many_experiments(num_expr, m_list, k_list, l_list, 
         plt.fill_between(x, y - error, y + error, alpha=0.5)
 
     if show_along is not None:
-        xticks, x_vals, x_label = get_x_axis_stuff(show_along, m_list_1, k_list_1, l_list_1)
+        xticks, x_vals, x_label = get_x_axis_stuff(show_along, m_list, k_list, l_list)
 
     plt.subplot(1, 2, 1)
     helper_plot_with_shaded_error_region(specs_grad_mean, specs_grad_var, label='grad', x=xticks)
@@ -380,13 +385,14 @@ def compare_grad_normal_mult_many_experiments(num_expr, m_list, k_list, l_list, 
 
 if __name__ == '__main__':
     m = 1024  # 1024 No. of datasamples
-    l = 8  # 8 No. of branches
-    k = 2  # 2 No. of branch parameters
-    maxlogk = 4  # 7  # 4  defines list of k's
-    maxlogl = 7  # 8 defines list of l's
-    num_expr = 10  # 100 No. of experiments to perform for statistics
-    perform_many_for_variance_and_mean = False  # default: False
-    calc_grad_only = True  # default: False
+    l = 8  # 8 No. of branches when fixed
+    k = 2  # 2 No. of branch parameters (factor) when fixed
+    maxlogk = 4  # 4  defines list of k's
+    maxlogl = 7  # 7/8 defines list of l's
+    num_expr = 100  # 100 No. of experiments to perform for statistics
+    perform_many_for_variance_and_mean = True  # default: False
+    compare_angles = False  # default: False
+    test_one = True
 
 
 
@@ -401,30 +407,6 @@ if __name__ == '__main__':
 
     random.seed(1)
 
-    # 1) compare along increasing width of each bbanch
-    print('analyzing width')
-    k_list_1 = [2 ** elem for elem in range(maxlogk)]
-    m_list_1 = [m] * len(k_list_1)
-    l_list_1 = [l] * len(k_list_1)
-    show_along = 'k'
-
-    angles_grad, angles_normal, angles_mult = compare_angles_grad_normal_mult(m_list_1, k_list_1, l_list_1, testloader, show_along=show_along)
-
-
-
-
-    if not calc_grad_only:
-        if perform_many_for_variance_and_mean:
-            compare_grad_normal_mult_many_experiments(num_expr, m_list_1, k_list_1, l_list_1, testloader,
-                                                      show_along=show_along)
-
-        specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1,
-                                                                                                           k_list_1,
-                                                                                                           l_list_1,
-                                                                                                           testloader,
-                                                                                                           show_along=show_along)
-
-
     # 2) compare along increasing No. of branches
     print('analyzing No. of Branches')
     l_list_2 = [2 ** elem for elem in range(2, maxlogl)]
@@ -432,20 +414,42 @@ if __name__ == '__main__':
     k_list_2 = [k] * len(l_list_2)
     show_along = 'l'
 
-    angles_grad, angles_normal, angles_mult = compare_angles_grad_normal_mult(m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+    if compare_angles:
+        angles_grad, angles_normal, angles_mult = compare_angles_grad_normal_mult(m_list_2, k_list_2, l_list_2,
+                                                                                  testloader, show_along=show_along)
 
-    if not calc_grad_only:
-        if perform_many_for_variance_and_mean:
-            compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader, show_along=show_along)
+    if perform_many_for_variance_and_mean:
+        compare_grad_normal_mult_many_experiments(num_expr, m_list_2, k_list_2, l_list_2, testloader,
+                                                  show_along=show_along)
 
+    if test_one:
         specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_2,
                                                                                                            k_list_2,
                                                                                                            l_list_2,
                                                                                                            testloader,
                                                                                                            show_along=show_along)
 
+    # 1) compare along increasing width of each branch
+    print('analyzing width')
+    k_list_1 = [2 ** elem for elem in range(maxlogk)]
+    m_list_1 = [m] * len(k_list_1)
+    l_list_1 = [l] * len(k_list_1)
+    show_along = 'k'
+
+    if compare_angles:
+        angles_grad, angles_normal, angles_mult = compare_angles_grad_normal_mult(m_list_1, k_list_1, l_list_1,
+                                                                                  testloader, show_along=show_along)
+
+    if perform_many_for_variance_and_mean:
+        compare_grad_normal_mult_many_experiments(num_expr, m_list_1, k_list_1, l_list_1, testloader,
+                                                  show_along=show_along)
+
+    if test_one:
+        specs_grad, specs_normal, specs_mult, acts_grad, acts_normal, acts_mult = compare_grad_normal_mult(m_list_1,
+                                                                                                           k_list_1,
+                                                                                                           l_list_1,
+                                                                                                           testloader,
+                                                                                                           show_along=show_along)
 
 
-    # save
-    # plt.savefig('spec_normal_rand_linearized.png', dpi=600)
     plt.show()

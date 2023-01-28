@@ -80,8 +80,6 @@ def get_grads_angles(grads):
 
     # cosine
     grads_cosine = grads_corr / grads_mag_cross_matrix  # L x L
-    print('grads_cosine.shape')
-    print(grads_cosine.shape)
     get_upper_tri_as_vector = lambda a, l: a[np.triu_indices(l, k=1)]
     grads_angles = np.rad2deg(np.arccos(np.abs(get_upper_tri_as_vector(grads_cosine, num_branches))))
 
